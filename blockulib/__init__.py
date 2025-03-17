@@ -14,7 +14,7 @@ class BlockGenerator():
                 self.list[i] = self.list[i].numpy()
             
     def __call__(self, num_blocks):
-        return [self.list[random.randint(0, self.size-1)] for i in range(num_blocks)]
+        return [self.list[random.randint(0, self.size-1)].clone() for i in range(num_blocks)]
 
     
 
@@ -59,11 +59,7 @@ def clear_board(input_square, output_square):
                         output_square[3*i + k, 3*j + l] = 0
     
     
-
-
-generator = BlockGenerator()
-def possible_moves(boards):
-    global generator
+def possible_moves(boards, generator):
     n = len(boards)
     blocks = generator(len(boards))
     for i in range(n):
@@ -77,4 +73,4 @@ def possible_moves(boards):
     indices = indices[~mask]
     pos = clear_board(pos)
     
-    return pos, indices
+    return torch.from_numpy(pos), indices
