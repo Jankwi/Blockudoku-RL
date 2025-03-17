@@ -19,9 +19,9 @@ class BlockGenerator():
     
 
 import numpy as np
-from numba import guvectorize, float64
+from numba import guvectorize, float32
 
-@guvectorize([(float64[:,:], float64[:,:])], '(m,n)->(m,n)', target='parallel')
+@guvectorize([(float32[:,:], float32[:,:])], '(m,n)->(m,n)', target='parallel')
 def clear_board(input_square, output_square):
     #Copying values
     for i in range(input_square.shape[0]):
