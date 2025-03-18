@@ -74,3 +74,35 @@ def possible_moves(boards, generator):
     pos = clear_board(pos)
     
     return torch.from_numpy(pos), indices
+
+
+import torch.nn.functional as F
+def sample_from_logits(logits, temperature = 1.0, top_k: int = None):
+    logits = logits / temperature
+
+    if top_k is not None and top_k < logits.size(-1):
+        top_vals, _ = torch.topk(logits, k=top_k)
+        threshold = top_vals[-1]
+        logits[logits < threshold] = float('-inf')
+
+    probs = F.softmax(logits, dim=-1)
+    sampled_index = torch.multinomial(probs, num_samples=1)
+    return sampled_index.item()
+
+def logits_to_choices(logits, index, num_games, temperature = 1.0, top_k: int = None):
+    range_left = [None for i in range(num_games)]
+    range_right = [None for i in range(num_games)]
+        
+    for i in range(index.shape[0]):
+        ind = int(index[i].item())
+        if range_left[ind] is None:
+            range_left[ind] = i
+        range_right[ind] = i+1
+            
+    choices = []
+    for left, right in zip(range_left, range_right):
+        if left is not None and right is not None:
+            choices.append(left+sample_from_logits(logits[left:right], temperature = temperature, top_k = top_k))
+        else:
+            choices.append(None)
+    return choices
