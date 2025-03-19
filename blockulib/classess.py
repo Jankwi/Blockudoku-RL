@@ -36,7 +36,7 @@ class PlayingLoop():
                 else:
                     pos_list[new_index[i]].append(pos[decisions[i]])
                     
-        print("ended after ", move, " moves")            
+        #print("ended after ", move, " moves")            
         return pos_list
                     
     def get_model_pred(self, data, batch_size, device = None):
