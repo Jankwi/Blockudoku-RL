@@ -30,3 +30,49 @@ class ConvModel(nn.Module):
         
     def forward(self, x):
         return self.model(x)
+    
+class SimpleModel(nn.Module):
+    def __init__(self):
+        super(SimpleModel, self).__init__()
+        self.model = nn.Sequential(
+        nn.Flatten(),
+        nn.Linear(9*9, 1)
+    )
+        
+    def forward(self, x):
+        return self.model(x)
+    
+class TrikowyModel(nn.Module):
+    def __init__(self):
+        super(TrikowyModel, self).__init__()
+        self.pipe1 = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=5, kernel_size=3),
+            nn.Flatten(),
+            nn.GELU(),
+            nn.Linear(5*7*7, 10)
+    )
+        self.pipe2 = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=5, kernel_size=4),
+            nn.Flatten(),
+            nn.GELU(),
+            nn.Linear(5*6*6, 10)
+    )
+        self.pipe3 = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=5, kernel_size=5),
+            nn.Flatten(),
+            nn.GELU(),
+            nn.Linear(5*5*5, 10)
+    )
+        self.final = nn.Sequential(
+            nn.GELU(),
+            nn.Linear(30, 1)
+        )
+        
+        
+    def forward(self, x):
+        A = self.pipe1(x)
+        B = self.pipe2(x)
+        C = self.pipe3(x)
+        inp = torch.cat([A, B, C], dim=1) 
+        return self.final(inp)
+        
