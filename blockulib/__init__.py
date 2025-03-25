@@ -86,6 +86,7 @@ def sample_from_logits(logits, temperature = 1.0, top_k: int = None):
         logits[logits < threshold] = float('-inf')
 
     probs = F.softmax(logits, dim=-1)
+    #print("Current probabilities ", probs.T)
     sampled_index = torch.multinomial(probs, num_samples=1)
     return sampled_index.item()
 

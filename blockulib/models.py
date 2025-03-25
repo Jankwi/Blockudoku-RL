@@ -25,11 +25,16 @@ class ConvModel(nn.Module):
         nn.Flatten(), 
         nn.Linear(32 * 9 * 9, 64),
         nn.ReLU(),
-        nn.Linear(64, 1)
     )
-        
+        self.SkipC = nn.Sequential(
+        nn.Flatten(),
+        nn.Linear(9*9, 64)
+    )
+        self.head = nn.Linear(64, 1)
     def forward(self, x):
-        return self.model(x)
+        y1 = self.model(x)
+        y2 = self.SkipC(x)
+        return self.head(y1 + y2)
     
 class SimpleModel(nn.Module):
     def __init__(self):
@@ -46,26 +51,32 @@ class TrikowyModel(nn.Module):
     def __init__(self):
         super(TrikowyModel, self).__init__()
         self.pipe1 = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=5, kernel_size=3),
+            nn.Conv2d(in_channels=1, out_channels=2, kernel_size=3), # (1, 9, 9) -> (2, 7, 7)
+            nn.ReLU(),
+            nn.Conv2d(in_channels=2, out_channels=4, kernel_size=3), # (2, 7, 7) -> (4, 5, 5)
             nn.Flatten(),
             nn.GELU(),
-            nn.Linear(5*7*7, 10)
+            nn.Linear(4*5*5, 7)
     )
         self.pipe2 = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=5, kernel_size=4),
+            nn.Conv2d(in_channels=1, out_channels=2, kernel_size=4), # (1, 9, 9) -> (2, 6, 6)
+            nn.ReLU(),
+            nn.Conv2d(in_channels=2, out_channels=4, kernel_size=3), # (2, 5, 5) -> (4, 4, 4)
             nn.Flatten(),
             nn.GELU(),
-            nn.Linear(5*6*6, 10)
+            nn.Linear(4*4*4, 7)
     )
         self.pipe3 = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=5, kernel_size=5),
+            nn.Conv2d(in_channels=1, out_channels=2, kernel_size=5), # (1, 9, 9) -> (2, 5, 5)
+            nn.ReLU(),
+            nn.Conv2d(in_channels=2, out_channels=4, kernel_size=3), # (2, 5, 5) -> (4, 3, 3)
             nn.Flatten(),
             nn.GELU(),
-            nn.Linear(5*5*5, 10)
+            nn.Linear(4*3*3, 7)
     )
         self.final = nn.Sequential(
             nn.GELU(),
-            nn.Linear(30, 1)
+            nn.Linear(21, 1)
         )
         
         
@@ -75,4 +86,6 @@ class TrikowyModel(nn.Module):
         C = self.pipe3(x)
         inp = torch.cat([A, B, C], dim=1) 
         return self.final(inp)
+    
+
         

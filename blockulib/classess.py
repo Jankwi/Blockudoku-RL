@@ -5,8 +5,47 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader, random_split
+from abc import ABC, abstractmethod
 
 class PlayingLoop():
+    @abstractmethod
+    def __call__():
+        "Run the playing loop"
+        pass
+
+class SimpleLoop(PlayingLoop):
+    
+    def __init__(self):
+        self.generator = blockulib.BlockGenerator()
+        
+    def __call__(self, num_games = 1, batch_size = 128, temperature = None, top_k = None):
+        pos_list = [[torch.zeros(9, 9)] for i in range(num_games)]
+        state = [True for i in range(num_games)]
+        active_games = num_games
+        move = 0
+        
+        while (active_games > 0):
+            move += 1
+            new_index = []
+            for i in range(num_games):
+                if state[i]:
+                    new_index.append(i)
+            boards = [pos_list[new_index[i]][-1].clone() for i in range(active_games)]
+            pos, ind = blockulib.possible_moves(boards, self.generator)
+            
+            state = [False for i in range(num_games)]
+            active_games = 0
+            for i in range(ind.shape[0]):
+                index = new_index[int(ind[i].item())]
+                if (not state[index]):
+                    state[index] = True
+                    pos_list[index].append(pos[i])
+                    active_games +=1
+        
+        return pos_list
+
+"""
+class ModelBasedLoop(PlayingLoop):
     
     def __init__(self, model_path = "models/conv_model.pth", architecture = blom.ConvModel):
         self.model = architecture()
@@ -59,10 +98,11 @@ class PlayingLoop():
                 predictions.append(output.cpu())
             
         return torch.cat(predictions)
+"""
     
-def play_games(num_games, batch_size, save_dir = "data/tensors/", temperature = 1.0, top_k: int = None):
+def play_games(num_games, batch_size, playing_loop: PlayingLoop, save_dir = "data/tensors/", temperature = 1.0, top_k: int = None):
     x_list, y_list = [], []
-    loop = PlayingLoop()
+    loop = playing_loop()
 
     
     for left in range(0, num_games, batch_size):
@@ -127,8 +167,6 @@ class Trainer():
     def __init__(self, architecture = blom.ConvModel, tensor_dir = "data/tensors/"):
         self.fetch_tensors(tensor_dir = tensor_dir)
         self.model = architecture()
-        print("initiated model")
-        print(self.model)
         
     def save(self, save_path = "models/conv_model.pth"):
         self.model.to('cpu')
