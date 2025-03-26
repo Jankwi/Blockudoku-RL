@@ -51,7 +51,7 @@ class ModelBasedLoop(PlayingLoop):
         self.generator = blockulib.BlockGenerator()
         self.model.eval()
         
-    def __call__(self, num_games = 1, batch_size = 4096, temperature = 1.0, top_k: int = None):
+    def __call__(self, num_games = 1, rethink_batch = 400, batch_size = 4096, temperature = 1.0, top_k: int = 5):
         pos_list = [[torch.zeros(9, 9)] for i in range(num_games)]
         state = [True for i in range(num_games)]
         active_games = num_games
@@ -67,6 +67,8 @@ class ModelBasedLoop(PlayingLoop):
             
             pos, ind = blockulib.possible_moves(boards, self.generator)
             logits = self.get_model_pred(pos, batch_size = batch_size)
+            pos, ind, logits = blockulib.cut_to_topk(pos, ind, logits, num_games = active_games, top_k = top_k)
+            logits = self.rethink_logits(pos, logits, rethink_batch)
             decisions = blockulib.logits_to_choices(logits, ind, active_games, temperature = temperature, top_k = top_k)
             
             for i in range(active_games):
@@ -96,6 +98,10 @@ class ModelBasedLoop(PlayingLoop):
             
         return torch.cat(predictions).squeeze(1)
     
+    def rethink_logits(self, pos, logits, rethink_batch):
+        return logits
+
+
 class Probe(ModelBasedLoop):
     
     def __call__(self, pos_tensor, depth = 5, batch_size = 4096, temperature = 1.0, top_k: int = None):
@@ -115,9 +121,6 @@ class Probe(ModelBasedLoop):
             logits = self.get_model_pred(pos, batch_size = batch_size)
             decisions = blockulib.logits_to_choices(logits, ind, active_games, temperature = temperature, top_k = top_k)
             
-            #print("act ", active_games)
-            #print("ni ", len(new_index))
-            #print("dec ", decisions)
             for i in range(active_games):
                 if (decisions[i] is None):
                     state[new_index[i]] = False
@@ -133,35 +136,37 @@ class Probe(ModelBasedLoop):
 
 class DeepSearch(ModelBasedLoop):
     def __init__(self):
-        self.generator = blockulib.BlockGenerator()
+        super().__init__()
         self.probe = Probe()
         self.dt = DataTransformer()
     
-    def get_model_pred(self, data, batch_size, probes_per_pos = 5):
+    def rethink_logits(self, data, old_logits, rethink_batch, depth = 3, probes_per_pos = 5):
         if (data.shape[0] == 0):
             return torch.tensor([])
         gls, lls = [], []
-        for i in range(0, data.shape[0], batch_size):
-            batch = data[i:i+batch_size]
+        for i in range(0, data.shape[0], rethink_batch):
+            batch = data[i:i+rethink_batch]
             batch = batch.repeat_interleave(probes_per_pos, dim = 0)
-            gl, ll = self.probe(pos_tensor = batch, temperature = 0.7, top_k = 5)
+            gl, ll = self.probe(pos_tensor = batch, depth = depth, temperature = 0.7, top_k = 3)
             gls.append(gl)
             lls.append(ll)
         GLs = torch.cat(gls)
         LLs = torch.cat(lls)
+        LLs[torch.where(GLs < depth)] = -10
         GLs += self.dt.logits_to_nums(LLs)
         LLs = self.dt.nums_to_logits(GLs)
         LLs = LLs.view(data.shape[0], probes_per_pos).mean(dim = 1)
         return LLs
-    
-def play_games(num_games, batch_size, playing_loop: PlayingLoop, save: bool = True, save_dir = "data/tensors/", temperature = 1.0, top_k: int = None):
+
+from tqdm import tqdm
+
+def play_games(num_games, games_at_once, playing_loop: PlayingLoop, save: bool = False, save_dir = "data/tensors/", batch_size = 4096, temperature = 1.0, top_k: int = None):
     x_list, y_list = [], []
     loop = playing_loop()
-    print("Reminder: Playing loop batch size set to 200")
     
-    for left in range(0, num_games, batch_size):
-        right = min(num_games, left+batch_size)
-        data = loop(num_games = (right - left), batch_size = 200, temperature = temperature, top_k = top_k)
+    for left in tqdm(range(0, num_games, games_at_once), desc = "Playing games"):
+        right = min(num_games, left+games_at_once)
+        data = loop(num_games = (right - left), batch_size = batch_size, temperature = temperature, top_k = top_k)
         for i in range((right-left)):
             y_list.append(torch.linspace(len(data[i])-1, 0, steps = len(data[i])))
             x_list.append(torch.stack(data[i]))

@@ -90,7 +90,7 @@ def sample_from_logits(logits, temperature = 1.0, top_k: int = None):
     sampled_index = torch.multinomial(probs, num_samples=1)
     return sampled_index.item()
 
-def logits_to_choices(logits, index, num_games, temperature = 1.0, top_k: int = None):
+def indices_to_range(num_games, index):
     range_left = [None for i in range(num_games)]
     range_right = [None for i in range(num_games)]
         
@@ -99,6 +99,28 @@ def logits_to_choices(logits, index, num_games, temperature = 1.0, top_k: int = 
         if range_left[ind] is None:
             range_left[ind] = i
         range_right[ind] = i+1
+        
+    return range_left, range_right
+
+def cut_to_topk(pos, index, logits, num_games, top_k): #pos, ind, logits
+    if (pos.shape[0] == 0):
+        return pos, index, logits
+    range_left, range_right = indices_to_range(num_games, index)
+        
+    chosen_indices = []
+    chosen_boards = []
+    chosen_logits = []
+    for left, right in zip(range_left, range_right):
+        if left is not None and right is not None:
+            values, indices = torch.topk(logits[left:right], k=min(right-left, top_k), dim=0)
+            chosen_boards.append((pos[left:right])[indices])
+            chosen_indices.append((index[left:right])[indices])
+            chosen_logits.append(values)
+    
+    return torch.cat(chosen_boards), torch.cat(chosen_indices), torch.cat(chosen_logits)
+
+def logits_to_choices(logits, index, num_games, temperature = 1.0, top_k: int = None):
+    range_left, range_right = indices_to_range(num_games, index)
             
     choices = []
     for left, right in zip(range_left, range_right):
