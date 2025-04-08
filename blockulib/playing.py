@@ -51,7 +51,7 @@ class ModelBasedLoop(PlayingLoop):
         self.generator = blockulib.BlockGenerator()
         self.model.eval()
         
-    def __call__(self, num_games = 1, rethink_batch = 400, batch_size = 4096, temperature = 1.0, top_k: int = 5):
+    def __call__(self, num_games = 1, pred_config = {}, rethink_config = {}, temperature = 1.0, top_k: int = 5):
         pos_list = [[torch.zeros(9, 9)] for i in range(num_games)]
         state = [True for i in range(num_games)]
         active_games = num_games
@@ -66,9 +66,9 @@ class ModelBasedLoop(PlayingLoop):
             boards = [pos_list[new_index[i]][-1].clone() for i in range(active_games)]
             
             pos, ind = blockulib.possible_moves(boards, self.generator)
-            logits = self.get_model_pred(pos, batch_size = batch_size)
+            logits = self.get_model_pred(pos, **pred_config)
             pos, ind, logits = blockulib.cut_to_topk(pos, ind, logits, num_games = active_games, top_k = top_k)
-            logits = self.rethink_logits(pos, logits, rethink_batch)
+            logits = self.rethink_logits(pos, logits, **rethink_config)
             decisions = blockulib.logits_to_choices(logits, ind, active_games, temperature = temperature, top_k = top_k)
             
             for i in range(active_games):
@@ -81,7 +81,7 @@ class ModelBasedLoop(PlayingLoop):
         #print("ended after ", move, " moves")            
         return pos_list
                     
-    def get_model_pred(self, data, batch_size, device = None):
+    def get_model_pred(self, data, batch_size = 2048, device = None):
         if (data.shape[0] == 0):
             return torch.tensor([])
         if device is None:
@@ -98,7 +98,7 @@ class ModelBasedLoop(PlayingLoop):
             
         return torch.cat(predictions).squeeze(1)
     
-    def rethink_logits(self, pos, logits, rethink_batch):
+    def rethink_logits(self, pos, logits):
         return logits
 
 
@@ -135,19 +135,19 @@ class Probe(ModelBasedLoop):
         return game_length, last_logit
 
 class DeepSearch(ModelBasedLoop):
-    def __init__(self):
+    def __init__(self, probe_config):
         super().__init__()
-        self.probe = Probe()
+        self.probe = Probe(**probe_config)
         self.dt = DataTransformer()
     
-    def rethink_logits(self, data, old_logits, rethink_batch, depth = 3, probes_per_pos = 5):
+    def rethink_logits(self, data, old_logits, rethink_batch = 100, depth = 5, probes_per_pos = 5, probe_config = {}):
         if (data.shape[0] == 0):
             return torch.tensor([])
         gls, lls = [], []
         for i in range(0, data.shape[0], rethink_batch):
             batch = data[i:i+rethink_batch]
             batch = batch.repeat_interleave(probes_per_pos, dim = 0)
-            gl, ll = self.probe(pos_tensor = batch, depth = depth, temperature = 0.7, top_k = 3)
+            gl, ll = self.probe(pos_tensor = batch, depth = depth, **probe_config)
             gls.append(gl)
             lls.append(ll)
         GLs = torch.cat(gls)
@@ -160,26 +160,23 @@ class DeepSearch(ModelBasedLoop):
 
 from tqdm import tqdm
 
-def play_games(num_games, games_at_once, playing_loop: PlayingLoop, save: bool = False, save_dir = "data/tensors/", batch_size = 4096, temperature = 1.0, top_k: int = None):
+def play_games(num_games, games_at_once, playing_loop: PlayingLoop, loop_init_config = {}, playing_config = {}, save: bool = False, save_dir = "data/tensors/"):
     x_list, y_list = [], []
-    loop = playing_loop()
+    loop = playing_loop(**loop_init_config)
+    total_moves = 0
     
     for left in tqdm(range(0, num_games, games_at_once), desc = "Playing games"):
         right = min(num_games, left+games_at_once)
-        data = loop(num_games = (right - left), batch_size = batch_size, temperature = temperature, top_k = top_k)
+        data = loop(num_games = (right - left), **playing_config)
         for i in range((right-left)):
+            total_moves += len(data[i])-1
             y_list.append(torch.linspace(len(data[i])-1, 0, steps = len(data[i])))
             x_list.append(torch.stack(data[i]))
     torch.cuda.empty_cache()
-            
-    x = torch.cat(x_list)
-    y = torch.cat(y_list)
     
     if save:
-        x_dict = {'x' : x}
-        torch.save(x_dict, save_dir + "x.pth")
-        y_dict = {'y' : y}
-        torch.save(y_dict, save_dir + "y.pth")
+        list_dict = {'x_list' : x_list, 'y_list' : y_list}
+        torch.save(list_dict, save_dir + "lists.pth")
     
-    print(f"Mean MPG : {(y.shape[0]/num_games) - 1}")
+    print(f"Mean MPG : {(total_moves/num_games)}")
     return

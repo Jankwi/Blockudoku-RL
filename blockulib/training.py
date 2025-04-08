@@ -59,6 +59,7 @@ class Trainer():
         x = x_dict['x']
         y = y_dict['y']
         dataset = TensorDataset(x, y)
+        print("Shape ", x.shape)
 
         train_size = int(0.8 * len(dataset))
         test_size = len(dataset) - train_size

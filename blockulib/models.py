@@ -40,8 +40,13 @@ class SimpleModel(nn.Module):
     def __init__(self):
         super(SimpleModel, self).__init__()
         self.model = nn.Sequential(
+        nn.Conv2d(in_channels=1, out_channels=4, kernel_size=3, stride = 3, padding=0),
         nn.Flatten(),
-        nn.Linear(9*9, 1)
+        nn.ReLU(),
+        nn.Linear(4*3*3, 10),
+        nn.GELU(),
+        nn.Linear(10, 1),
+        nn.Tanh()
     )
         
     def forward(self, x):
