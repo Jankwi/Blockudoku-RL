@@ -14,7 +14,8 @@ class Trainer():
         self.model.to('cpu')
         torch.save(self.model.state_dict(), save_path)
     
-    def __call__(self, num_epochs, step_size, batch_size = 128, log_every = 1):
+    def __call__(self, num_epochs, step_size, batch_size = 128, log_every = 1, save_best = True):
+        best_so_far = 10000.0
         train_loader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True)
         test_loader = DataLoader(self.test_dataset, batch_size=batch_size, shuffle=False)
         
@@ -64,3 +65,8 @@ class Trainer():
         train_size = int(0.8 * len(dataset))
         test_size = len(dataset) - train_size
         self.train_dataset, self.test_dataset = random_split(dataset, [train_size, test_size])
+        
+def train_model(Train: Trainer = Trainer, train_init_config = {}, train_config = {}, train_save_config = {}):
+    train = Train(**train_init_config)
+    train(**train_config)
+    train.save(**train_save_config)

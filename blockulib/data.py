@@ -97,7 +97,7 @@ class OneFromEach(DataOrganizer):
         assert(len(x_list) == len(y_list))
         
         for i in range(len(x_list)):
-            chosen_ind  = random.randint(0, len(x_list[i]))
+            chosen_ind  = random.randint(0, len(x_list[i])-1)
             chosen_x.append(x_list[i][chosen_ind])
             chosen_y.append(y_list[i][chosen_ind])
                                          
