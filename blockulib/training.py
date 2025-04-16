@@ -9,27 +9,31 @@ class Trainer():
     def __init__(self, architecture = blom.ConvModel, tensor_dir = "data/tensors/"):
         self.fetch_tensors(tensor_dir = tensor_dir)
         self.model = architecture()
+        self.device = 'cpu'
         
-    def save(self, save_path = "models/conv_model.pth"):
+    def save(self, save_path = "models/conv_model.pth", final_save = False):
         self.model.to('cpu')
         torch.save(self.model.state_dict(), save_path)
+        if not final_save:
+            self.model.to(self.device)
+        print("Succesfully saved model")
     
-    def __call__(self, num_epochs, step_size, batch_size = 128, log_every = 1, save_best = True):
-        best_so_far = 10000.0
+    def __call__(self, num_epochs, step_size, batch_size = 128, log_every = 1, save_config = {}, save_best = True):
+        self.best_so_far = 10000.0
         train_loader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True)
         test_loader = DataLoader(self.test_dataset, batch_size=batch_size, shuffle=False)
         
         optimizer = optim.Adam(self.model.parameters(), lr=step_size)
         loss_fn = nn.MSELoss()
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
         self.model.train()
-        self.model.to(device)
+        self.model.to(self.device)
         for epoch in range(num_epochs):
             total_loss = 0.0
             for x_batch, y_batch in train_loader:
-                x_batch = x_batch.to(device).unsqueeze(1)
-                y_batch = y_batch.to(device)
+                x_batch = x_batch.to(self.device).unsqueeze(1)
+                y_batch = y_batch.to(self.device)
                 optimizer.zero_grad()
                 outputs = self.model(x_batch)
                 loss = loss_fn(outputs.squeeze(), y_batch)
@@ -45,14 +49,17 @@ class Trainer():
                 test_loss = 0.0
                 with torch.no_grad():
                     for x_batch, y_batch in test_loader:
-                        x_batch = x_batch.to(device).unsqueeze(1)
-                        y_batch = y_batch.to(device)
+                        x_batch = x_batch.to(self.device).unsqueeze(1)
+                        y_batch = y_batch.to(self.device)
                         outputs = self.model(x_batch)
                         loss = loss_fn(outputs.squeeze(), y_batch)
                         test_loss += loss.item() * x_batch.size(0)
                     test_loss /= len(test_loader.dataset)
                     print(f"Test Loss: {test_loss:.4f}")
-            
+                    if test_loss < self.best_so_far:
+                        self.best_so_far = test_loss
+                        if save_best:
+                            self.save(**save_config, final_save = bool(epoch + 1 == num_epochs))
         
     def fetch_tensors(self, tensor_dir):
         x_dict = torch.load(tensor_dir + "x.pth")
@@ -68,5 +75,4 @@ class Trainer():
         
 def train_model(Train: Trainer = Trainer, train_init_config = {}, train_config = {}, train_save_config = {}):
     train = Train(**train_init_config)
-    train(**train_config)
-    train.save(**train_save_config)
+    train(save_config = train_save_config, **train_config)
