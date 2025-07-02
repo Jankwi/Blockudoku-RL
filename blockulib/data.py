@@ -28,8 +28,7 @@ class DataOrganizer():
         pass
         
     def __call__(self, iteration = 2137, save_dir = "data/tensors/", choose_config = {}, show = False):
-        
-        self.choose_boards(save_dir, **choose_config)
+        self.prep_data(save_dir, choose_config)
         
         y_dict = torch.load(save_dir + "y.pth")
         y = y_dict['y']
@@ -47,24 +46,24 @@ class DataOrganizer():
         with open(save_dir + "transform_params.pkl", "wb") as f:
             pickle.dump(tr_dict, f)
             
-    def choose_boards(self, save_dir):
-        chosen_x = []
-        chosen_y = []
-        
+    def prep_data(self, save_dir, choose_config = {}):
         list_dict = torch.load(save_dir + "lists.pth")
         x_list = list_dict['x_list']
         y_list = list_dict['y_list']
         assert(len(x_list) == len(y_list))
         
-        x = torch.cat(x_list)
-        y = torch.cat(y_list)
-        assert(x.shape[0] == y.shape[0])
-    
+        x, y = self.choose_boards(x_list = x_list, y_list = y_list, **choose_config)
+        
         x_dict = {'x' : x}
         torch.save(x_dict, save_dir + "x.pth")
         y_dict = {'y' : y}
         torch.save(y_dict, save_dir + "y.pth")
-        
+            
+    def choose_boards(self, x_list, y_list):
+        x = torch.cat(x_list)
+        y = torch.cat(y_list)
+        assert(x.shape[0] == y.shape[0])
+        return x, y
         
     def diagram(self, values, bins, save_dir = "data/diagrams/", show = False, diagram_name = ""):
         plt.figure(figsize=(10, 6))
@@ -87,14 +86,9 @@ class DataOrganizer():
     
 class OneFromEach(DataOrganizer):
     
-    def choose_boards(self, save_dir):
+    def choose_boards(self, x_list, y_list):
         chosen_x = []
         chosen_y = []
-        
-        list_dict = torch.load(save_dir + "lists.pth")
-        x_list = list_dict['x_list']
-        y_list = list_dict['y_list']
-        assert(len(x_list) == len(y_list))
         
         for i in range(len(x_list)):
             chosen_ind  = random.randint(0, len(x_list[i])-1)
@@ -103,20 +97,11 @@ class OneFromEach(DataOrganizer):
                                          
         x = torch.stack(chosen_x)
         y = torch.stack(chosen_y)
-        x_dict = {'x' : x}
-        torch.save(x_dict, save_dir + "x.pth")
-        y_dict = {'y' : y}
-        torch.save(y_dict, save_dir + "y.pth")
+        return x, y
         
 class RandomBoards(DataOrganizer):
     
-    def choose_boards(self, save_dir, n = None, multiplier = 1.0, cap = None):
-        
-        list_dict = torch.load(save_dir + "lists.pth")
-        x_list = list_dict['x_list']
-        y_list = list_dict['y_list']
-        assert(len(x_list) == len(y_list))
-        
+    def choose_boards(self, x_list, y_list, n = None, multiplier = 1.0, cap = None):
         x = torch.cat(x_list)
         y = torch.cat(y_list)
         assert(x.shape[0] == y.shape[0])
@@ -129,8 +114,32 @@ class RandomBoards(DataOrganizer):
         chosen_idx = torch.randperm(x.shape[0])[:n]
         x = x[chosen_idx]
         y = y[chosen_idx]
+        return x, y
+    
+class UniqueBased(DataOrganizer):        
+    def get_unique(self, tensor, k = 9):
+        flat = tensor.view(-1, k*k)
         
-        x_dict = {'x' : x}
-        torch.save(x_dict, save_dir + "x.pth")
-        y_dict = {'y' : y}
-        torch.save(y_dict, save_dir + "y.pth")
+        unique_flat, inverse, counts = torch.unique(
+            flat, dim=0, return_inverse=True, return_counts=True
+        )
+        unique_blocks = unique_flat.view(-1, k, k)
+        
+        return unique_blocks, inverse, counts
+    
+class MostPopular(UniqueBased):
+        
+    def choose_boards(self, x_list, y_list, threshold = 3, k = 9):
+        all_xs = torch.cat(x_list, dim = 0)
+        unique_blocks, inverse, counts = self.get_unique(all_xs, k = k)
+        relevant = torch.where(counts >= threshold)[0]
+        
+        n_relevant = relevant.shape[0]
+        new_ys = torch.zeros(n_relevant)
+        all_ys   = torch.cat(y_list,  dim=0)
+
+        for i in range(n_relevant):
+            occurences = (inverse == relevant[i])
+            new_ys[i] = all_ys[occurences].mean().item()
+            
+        return unique_blocks[relevant], new_ys

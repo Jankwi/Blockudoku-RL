@@ -8,7 +8,7 @@ from blockulib.data import DataTransformer
 class PlayingLoop():
     @abstractmethod
     def __call__():
-        "Run the playing loop"
+        #Run the playing loop
         pass
 
 class SimpleLoop(PlayingLoop):
