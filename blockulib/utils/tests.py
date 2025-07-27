@@ -7,7 +7,7 @@ class PositionListTests():
         for shallow in [False, True]:
             self.init_test(False, shallow = shallow)
             self.init_test(True, shallow = shallow)
-            self.process_chosen_moves(shallow = shallow)
+            self.process_chosen_moves_test(shallow = shallow)
         print("All tests passed")
     
     def init_test(self, init_from_games, shallow = False, num_games = 10):
@@ -23,7 +23,7 @@ class PositionListTests():
         assert(num_games == pos_list.active_games)
         
         active_boards = pos_list.active_boards()
-        assert(num_games == len(active_boards))
+        assert(num_games == active_boards.shape[0])
         for i in range(num_games):
             assert(torch.equal(torch.zeros(9, 9), active_boards[i]))
         
@@ -51,13 +51,13 @@ class PositionListTests():
                 assert(torch.equal(list1[i][j], list2[i][j]))
                 
                 
-    def process_chosen_moves(self, shallow = False):
+    def process_chosen_moves_test(self, shallow = False):
         if shallow:
-            return self.pchm_shallow()
+            return self.pchm_shallow_test()
         else:
-            return self.pchm_deep()
+            return self.pchm_deep_test()
         
-    def pchm_shallow(self,):
+    def pchm_shallow_test(self,):
         shallow_list = ShallowList(5)
         shallow_list.active_boards()
 
@@ -77,5 +77,18 @@ class PositionListTests():
         assert(torch.equal(expected_game_lengths, shallow_list.game_lengths))
         assert(torch.equal(expected_state, shallow_list.state))
         
-    def pchm_deep(self, ):
-        return # empty for now 
+    def pchm_deep_test(self):
+        deep_list = DeepList(5)
+        deep_list.active_boards()
+        
+        tensor = torch.randn(5, 9, 9)
+        tensor[0, 0, 0]  = float('nan')
+        tensor[2, 4, 5]  = float('nan')
+        
+        expected_pos_list = [[torch.zeros(9, 9)] for i in range(5)]
+        for i in range(5):
+            if i not in {0, 2}:
+                expected_pos_list[i].append(tensor[i].clone())
+        
+        deep_list.process_chosen_moves(tensor)
+        self.compare_call_deep(expected_pos_list, deep_list.pos_list)

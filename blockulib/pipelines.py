@@ -11,7 +11,7 @@ class Configs:
         raise TypeError(f"{cls.__name__} is a static utility class and cannot be instantiated.")
 
     @classmethod
-    def simple_playing_config(cls, num_games = 1000, games_at_once = 1000, save = True):
+    def model_playing_config(cls, num_games = 1000, games_at_once = 1000, save = True):
         simple_config = {
             'num_games' : num_games,
             'games_at_once' : games_at_once,

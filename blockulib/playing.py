@@ -1,85 +1,67 @@
 import blockulib
 import blockulib.models as blom
-import matplotlib.pyplot as plt
 import torch
 from abc import ABC, abstractmethod
 from blockulib.data import DataTransformer
+from blockulib.utils import PositionList, ShallowList, DeepList
 
 class PlayingLoop():
+    
+    def __init__(self, pos_list_type = DeepList):
+        self.generator = blockulib.BlockGenerator()
+        self.pos_list_type = pos_list_type
+    
+    def __call__(self, num_games = 1, starting_positions = None, pick_moves_config = {}):
+        self.pos_list = self.pos_list_type(num_games, starting_positions)
+        self.num_games = self.pos_list.num_games
+        self.move = 0
+        
+        while (self.pos_list.active_games > 0 and self.continue_condition()):
+            self.move += 1
+            boards = self.pos_list.active_boards()
+            pos, ind = blockulib.possible_moves(boards, self.generator)
+            chosen_moves = self.pick_moves(self.pos_list.active_games, pos, ind, **pick_moves_config)
+            self.pos_list.process_chosen_moves(chosen_moves)
+                
+        return self.pos_list()
+    
+    def continue_condition(self,):
+        return True
+    
     @abstractmethod
-    def __call__():
-        #Run the playing loop
+    def pick_moves(self, how_many, pos, ind):
         pass
-
+    
 class SimpleLoop(PlayingLoop):
     
-    def __init__(self):
-        self.generator = blockulib.BlockGenerator()
-        
-    def __call__(self, num_games = 1, batch_size = 128, temperature = None, top_k = None):
-        pos_list = [[torch.zeros(9, 9)] for i in range(num_games)]
-        state = [True for i in range(num_games)]
-        active_games = num_games
-        move = 0
-        
-        while (active_games > 0):
-            move += 1
-            new_index = []
-            for i in range(num_games):
-                if state[i]:
-                    new_index.append(i)
-            boards = [pos_list[new_index[i]][-1].clone() for i in range(active_games)]
-            pos, ind = blockulib.possible_moves(boards, self.generator)
-            
-            state = [False for i in range(num_games)]
-            active_games = 0
-            for i in range(ind.shape[0]):
-                index = new_index[int(ind[i].item())]
-                if (not state[index]):
-                    state[index] = True
-                    pos_list[index].append(pos[i])
-                    active_games +=1
-        
-        return pos_list
-
+    def pick_moves(self, how_many, pos, ind):
+        chosen_moves = torch.full((how_many, 9, 9), torch.nan)
+        for i in range(ind.shape[0]):
+            index = int(ind[i].item())
+            if chosen_moves[index].isnan().any():
+                chosen_moves[index] = pos[i]
+        return chosen_moves
+    
 class ModelBasedLoop(PlayingLoop):
     
-    def __init__(self, model_path = "models/conv_model.pth", architecture = blom.ConvModel):
+    def __init__(self, pos_list_type = DeepList, model_path = "models/conv_model.pth", architecture = blom.ConvModel):
+        super().__init__(pos_list_type)
         self.model = architecture()
         state_dict = torch.load(model_path)
         self.model.load_state_dict(state_dict)
-        self.generator = blockulib.BlockGenerator()
         self.model.eval()
         
-    def __call__(self, num_games = 1, pred_config = {}, rethink_config = {}, temperature = 1.0, top_k: int = 5):
-        pos_list = [[torch.zeros(9, 9)] for i in range(num_games)]
-        state = [True for i in range(num_games)]
-        active_games = num_games
-        move = 0
+    def pick_moves(self, how_many, pos, ind, pred_config = {}, rethink_config = {}, temperature = 1.0, top_k: int = 5):
+        logits = self.get_model_pred(data = pos, **pred_config)
+        pos, ind, logits = blockulib.cut_to_topk(pos, ind, logits, num_games = self.pos_list.active_games, top_k = top_k)
+        logits = self.rethink_logits(pos, logits, **rethink_config)
+        decisions = blockulib.logits_to_choices(logits, ind, self.pos_list.active_games, temperature = temperature, top_k = top_k)
         
-        while (active_games > 0):
-            move += 1
-            new_index = []
-            for i in range(num_games):
-                if state[i]:
-                    new_index.append(i)
-            boards = [pos_list[new_index[i]][-1].clone() for i in range(active_games)]
-            
-            pos, ind = blockulib.possible_moves(boards, self.generator)
-            logits = self.get_model_pred(pos, **pred_config)
-            pos, ind, logits = blockulib.cut_to_topk(pos, ind, logits, num_games = active_games, top_k = top_k)
-            logits = self.rethink_logits(pos, logits, **rethink_config)
-            decisions = blockulib.logits_to_choices(logits, ind, active_games, temperature = temperature, top_k = top_k)
-            
-            for i in range(active_games):
-                if (decisions[i] is None):
-                    state[new_index[i]] = False
-                    active_games -= 1
-                else:
-                    pos_list[new_index[i]].append(pos[decisions[i]])
-                    
-        #print("ended after ", move, " moves")            
-        return pos_list
+        chosen_moves = torch.full((self.pos_list.active_games, 9, 9), torch.nan)
+        for i in range(self.pos_list.active_games):
+            if decisions[i] is not None:
+                chosen_moves[i] = pos[decisions[i]]
+        return chosen_moves
                     
     def get_model_pred(self, data, batch_size = 2048, device = None):
         if (data.shape[0] == 0):
@@ -100,63 +82,44 @@ class ModelBasedLoop(PlayingLoop):
     
     def rethink_logits(self, pos, logits):
         return logits
-
-
+    
 class Probe(ModelBasedLoop):
     
-    def __call__(self, pos_tensor, depth = 5, batch_size = 4096, temperature = 1.0, top_k: int = None):
-        num_games = pos_tensor.shape[0]
-        state = [True for i in range(num_games)]
-        game_length = torch.zeros(num_games)
-        last_logit = torch.full((num_games, ), float('-inf'))
-        active_games = num_games
+    def __init__(self, depth = 5, pos_list_type = ShallowList):
+        super().__init__(pos_list_type = pos_list_type)
+        self.depth = depth
         
-        for d in range(depth):
-            new_index = []
-            for i in range(num_games):
-                if state[i]:
-                    new_index.append(i)
-            boards = [pos_tensor[new_index[i]].clone() for i in range(active_games)]
-            pos, ind = blockulib.possible_moves(boards, self.generator)
-            logits = self.get_model_pred(pos, batch_size = batch_size)
-            decisions = blockulib.logits_to_choices(logits, ind, active_games, temperature = temperature, top_k = top_k)
-            
-            for i in range(active_games):
-                if (decisions[i] is None):
-                    state[new_index[i]] = False
-                    active_games -= 1
-                else:
-                    pos_tensor[new_index[i]] = pos[decisions[i]]
-                    game_length[new_index[i]] += 1.
-                    last_logit[new_index[i]] = logits[decisions[i]]
-            if (active_games == 0):
-                break
-           
-        return game_length, last_logit
+    def continue_condition(self,):
+        return self.move < self.depth
+    
 
 class DeepSearch(ModelBasedLoop):
-    def __init__(self, probe_config):
-        super().__init__()
-        self.probe = Probe(**probe_config)
+    def __init__(self, pos_list_type = DeepList, probe_config = {}, model_path = "models/conv_model.pth", architecture = blom.ConvModel):
+        super().__init__(pos_list_type = pos_list_type, model_path = model_path, architecture = architecture)
+        self.probe = Probe(pos_list_type = ShallowList, **probe_config)
         self.dt = DataTransformer()
     
-    def rethink_logits(self, data, old_logits, rethink_batch = 100, depth = 5, probes_per_pos = 5, probe_config = {}):
+    def rethink_logits(self, data, old_logits, rethink_batch = 100, probes_per_pos = 5, probe_config = {}):
         if (data.shape[0] == 0):
             return torch.tensor([])
-        gls, lls = [], []
+        
+        end_state_list, length_list = [], []
         for i in range(0, data.shape[0], rethink_batch):
             batch = data[i:i+rethink_batch]
             batch = batch.repeat_interleave(probes_per_pos, dim = 0)
-            gl, ll = self.probe(pos_tensor = batch, depth = depth, **probe_config)
-            gls.append(gl)
-            lls.append(ll)
-        GLs = torch.cat(gls)
-        LLs = torch.cat(lls)
-        LLs[torch.where(GLs < depth)] = -10
-        GLs += self.dt.logits_to_nums(LLs)
-        LLs = self.dt.nums_to_logits(GLs)
-        LLs = LLs.view(data.shape[0], probes_per_pos).mean(dim = 1)
-        return LLs
+            probe_states, probe_lengths = self.probe(starting_positions = batch, **probe_config)
+            
+            end_state_list.append(probe_states)
+            length_list.append(probe_lengths)
+        
+        all_lengths = torch.cat(length_list)
+        all_states = torch.cat(end_state_list)
+        needs_pred = torch.where(all_lengths == self.probe.depth)
+        
+        pred_logits = self.get_model_pred(all_states[needs_pred])
+        all_lengths[needs_pred] += self.dt.logits_to_nums(pred_logits)
+        average_length = all_lengths.view(data.shape[0], probes_per_pos).mean(dim = 1)
+        return self.dt.nums_to_logits(average_length)
 
 from tqdm import tqdm
 
