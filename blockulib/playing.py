@@ -2,7 +2,7 @@ import blockulib
 import blockulib.models as blom
 import torch
 from abc import ABC, abstractmethod
-from blockulib.data import DataTransformer
+from blockulib.data import DataTransformer, YDiscounter
 from blockulib.utils import PositionList, ShallowList, DeepList
 
 class PlayingLoop():
@@ -40,6 +40,18 @@ class SimpleLoop(PlayingLoop):
             index = int(ind[i].item())
             if chosen_moves[index].isnan().any():
                 chosen_moves[index] = pos[i]
+        return chosen_moves
+    
+class RandomLoop(PlayingLoop):
+    
+    def pick_moves(self, how_many, pos, ind):
+        chosen_moves = torch.full((how_many, 9, 9), torch.nan)
+        for idx in range(how_many):
+            idx_mask = (ind == idx)
+            if  idx_mask.any().item():
+                candidates = pos[idx_mask]
+                r = torch.randint(candidates.shape[0], (1,)).item()
+                chosen_moves[idx] = candidates[r]
         return chosen_moves
     
 class ModelBasedLoop(PlayingLoop):
@@ -143,3 +155,39 @@ def play_games(num_games, games_at_once, playing_loop: PlayingLoop, loop_init_co
     
     print(f"Mean MPG : {(total_moves/num_games)}")
     return
+
+class YEstimator():
+
+    def __init__(self, games_at_once, games_per_board, save_dir = ""):
+        self.games_per_board = games_per_board
+        self.boards_at_once = int(games_at_once / games_per_board)
+        print(f"{self.boards_at_once} boards will be processed at once, with {games_per_board} games per board ({games_at_once} games at once)")
+
+    def estimate_batch(self, batch, discounter : YDiscounter, playing_loop : PlayingLoop, loop_config = {}):
+        batch_repeated = batch.repeat_interleave(self.games_per_board, dim = 0)
+        _, lengths = playing_loop(starting_positions = batch_repeated, **loop_config)
+        vals = discounter.lengths_to_values(lengths)
+        return vals.view(batch.shape[0], self.games_per_board).mean(dim=1)
+
+    def estimate_boards(self, boards, loop_type, loop_init_config = {}, dsc_config = {}, batch_config = {}):
+        discounter = YDiscounter(**dsc_config)
+        loop = loop_type(pos_list_type = ShallowList, **loop_init_config)
+        
+        vals_list = []
+        for i in tqdm(range(0, boards.shape[0], self.boards_at_once), desc = "Estimating ys"):
+            batch = boards[i:i+self.boards_at_once]
+            vals_list.append(self.estimate_batch(batch = batch, discounter = discounter, playing_loop = loop, **batch_config))
+        return torch.cat(vals_list)
+
+    def load_boards(self, save_dir = "data/tensors/"):
+        x_dict = torch.load(save_dir + "x.pth")
+        return x_dict['x']
+
+    def save_ys(self, y, save_dir = "data/tensors/"):
+        y_dict = {'y' : y}
+        torch.save(y_dict, save_dir + "y.pth")
+
+    def __call__(self, loop_type : PlayingLoop, save_dir = "data/tensors/", estimate_config = {}):
+        boards = self.load_boards(save_dir = save_dir)
+        y = self.estimate_boards(boards = boards, loop_type = loop_type, **estimate_config)
+        self.save_ys(y = y, save_dir = save_dir)

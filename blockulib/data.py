@@ -2,6 +2,7 @@ import torch
 import pickle
 import random
 import matplotlib.pyplot as plt
+from abc import ABC, abstractmethod
 
 class DataTransformer():
     
@@ -115,23 +116,23 @@ class RandomBoards(DataOrganizer):
         x = x[chosen_idx]
         y = y[chosen_idx]
         return x, y
+          
+def get_unique(tensor):
+    k = tensor.shape[1]
+    flat = tensor.view(-1, k*k)
+
+    unique_flat, inverse, counts = torch.unique(
+        flat, dim=0, return_inverse=True, return_counts=True
+    )
+    unique_blocks = unique_flat.view(-1, k, k)
+
+    return unique_blocks, inverse, counts
     
-class UniqueBased(DataOrganizer):        
-    def get_unique(self, tensor, k = 9):
-        flat = tensor.view(-1, k*k)
+class MostPopular(DataOrganizer):
         
-        unique_flat, inverse, counts = torch.unique(
-            flat, dim=0, return_inverse=True, return_counts=True
-        )
-        unique_blocks = unique_flat.view(-1, k, k)
-        
-        return unique_blocks, inverse, counts
-    
-class MostPopular(UniqueBased):
-        
-    def choose_boards(self, x_list, y_list, threshold = 3, k = 9):
+    def choose_boards(self, x_list, y_list, threshold = 3):
         all_xs = torch.cat(x_list, dim = 0)
-        unique_blocks, inverse, counts = self.get_unique(all_xs, k = k)
+        unique_blocks, inverse, counts = get_unique(all_xs)
         relevant = torch.where(counts >= threshold)[0]
         
         n_relevant = relevant.shape[0]
@@ -143,3 +144,57 @@ class MostPopular(UniqueBased):
             new_ys[i] = all_ys[occurences].mean().item()
             
         return unique_blocks[relevant], new_ys
+    
+    
+class XTransform():
+    def __init__(self, ):
+        pass
+    
+    def __call__(self, save_dir = "data/tensors/", transform_config = {}):
+        list_dict = torch.load(save_dir + "lists.pth")
+        x_list = list_dict['x_list']
+        y_list = list_dict['y_list']
+        assert(len(x_list) == len(y_list))
+        
+        x = self.transform(x_list = x_list, y_list = y_list, **transform_config)
+        x_dict = {'x' : x}
+        torch.save(x_dict, save_dir + "x.pth")
+    
+    @abstractmethod
+    def transform(self, x_list, y_list):
+        pass
+    
+class NMostPopular(XTransform):
+    
+    def transform(self, x_list, y_list, top_n):
+        all_xs = torch.cat(x_list, dim = 0)
+        unique_blocks, inverse, counts = get_unique(all_xs)
+        
+        print(f"{top_n} boards requested, out of {unique_blocks.shape[0]}")
+        if unique_blocks.shape[0] < top_n:
+            print("Warning - not enough boards, lowering top_n")
+            top_n = unique_blocks.shape[0]
+        
+        threshold, prioritised = 1, (counts >= 1)
+        while prioritised.sum().item() > top_n:
+            threshold += 1
+            prioritised = (counts >= threshold)
+        transformed = unique_blocks[prioritised]    
+        
+        places_left = top_n - prioritised.sum().item()
+        print(f"Threshold set at {threshold}, {places_left} places left")
+        if places_left > 0:
+            candidates = unique_blocks[counts == (threshold - 1)]
+            chosen_idx = torch.randperm(candidates.shape[0])[:places_left]
+            transformed = torch.cat([transformed, candidates[chosen_idx]])
+            
+        return transformed
+
+class YDiscounter():
+    def __init__(self, dsc_rate = 0.95):
+        self.q = torch.as_tensor(dsc_rate)
+        
+    def lengths_to_values(self, lengths : torch.Tensor):
+        if (self.q.item() == 1):
+            return length
+        return (1 - torch.pow(self.q, lengths)) / (1 - self.q)

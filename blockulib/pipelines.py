@@ -1,6 +1,7 @@
 import time
 import blockulib.models as blom
-from blockulib.playing import ModelBasedLoop, DeepSearch
+from blockulib.utils import PositionList, DeepList, ShallowList
+from blockulib.playing import RandomLoop, ModelBasedLoop, DeepSearch
 from blockulib.data import DataOrganizer
 from blockulib.playing import play_games
 from blockulib.training import train_model
@@ -9,6 +10,19 @@ from blockulib.training import train_model
 class Configs:
     def __new__(cls, *args, **kwargs):
         raise TypeError(f"{cls.__name__} is a static utility class and cannot be instantiated.")
+        
+    @classmethod
+    def play_random_config(cls, num_games, games_at_once, save = True):
+        random_config = {
+            'num_games' : num_games,
+            'games_at_once' : games_at_once,
+            'playing_loop' : RandomLoop,
+            'save' : save,
+            'loop_init_config': {
+                'pos_list_type' : DeepList
+            }
+        }
+        return random_config
 
     @classmethod
     def model_playing_config(cls, num_games = 1000, games_at_once = 1000, save = True):
@@ -73,6 +87,15 @@ class Configs:
             }
         }
         return dorg_config
+    @classmethod
+    def n_most_popular_config(cls, top_n):
+        config = {
+            'transform_config' : {
+                'top_n' : top_n
+            }
+        }
+        return config
+    
     
     @classmethod
     def train_init_config(cls, architecture = blom.ConvModel):
