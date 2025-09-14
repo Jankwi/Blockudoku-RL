@@ -28,13 +28,16 @@ class DataOrganizer():
     def __init__(self, ):
         pass
         
-    def __call__(self, iteration = 2137, save_dir = "data/tensors/", choose_config = {}, show = False):
-        self.prep_data(save_dir, choose_config)
+    def __call__(self, iteration = 2137, save_dir = "data/tensors/", prep_data = True, choose_config = {}, show = False, num_bins = None):
+        if prep_data:
+            self.prep_data(save_dir, choose_config) # optional call
         
         y_dict = torch.load(save_dir + "y.pth")
         y = y_dict['y']
-        num_bins = int(y.max() + 1)
         
+        if num_bins is None:
+            num_bins = int(y.max() + 1)
+
         self.diagram(y, bins = num_bins, diagram_name = f"original{iteration//10}{iteration%10}", show = show)
         y = self.transform(y)
         self.diagram(y, bins = num_bins, diagram_name = f"transformed{iteration//10}{iteration%10}", show = show)

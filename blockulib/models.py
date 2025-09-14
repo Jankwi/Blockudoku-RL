@@ -35,6 +35,17 @@ class ConvModel(nn.Module):
         y2 = self.SkipC(x)
         return self.head(y1 + y2)
     
+class LinearModel(nn.Module):
+    def __init__(self):
+        super(LinearModel, self).__init__()
+        self.model = nn.Sequential(
+        nn.Flatten(),
+        nn.Linear(9*9, 1),
+    )
+        
+    def forward(self, x):
+        return self.model(x)   
+    
 class SimpleModel(nn.Module):
     def __init__(self):
         super(SimpleModel, self).__init__()
@@ -92,53 +103,53 @@ class TrikowyModel(nn.Module):
         return self.final(inp)
 
 
-class EmbeddedConvModel(nn.Module):
-    def __init__(self, emb_dim=8):
-        super(EmbeddedConvModel, self).__init__()
-        # Embedding layer that maps each board value (0 or 1) to a dense vector.
-        self.embedding = nn.Embedding(num_embeddings=2, embedding_dim=emb_dim)
+# class EmbeddedConvModel(nn.Module):
+#     def __init__(self, emb_dim=8):
+#         super(EmbeddedConvModel, self).__init__()
+#         # Embedding layer that maps each board value (0 or 1) to a dense vector.
+#         self.embedding = nn.Embedding(num_embeddings=2, embedding_dim=emb_dim)
         
-        # Convolution branch:
-        # After embedding, the board shape is (batch, 9, 9, emb_dim).
-        # We permute the dimensions to (batch, emb_dim, 9, 9) for convolution.
-        self.conv_branch = nn.Sequential(
-            nn.Conv2d(in_channels=emb_dim, out_channels=16, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Flatten(),  # Output will be (32 * 9 * 9)
-            nn.Linear(32 * 9 * 9, 64),
-            nn.ReLU()
-        )
+#         # Convolution branch:
+#         # After embedding, the board shape is (batch, 9, 9, emb_dim).
+#         # We permute the dimensions to (batch, emb_dim, 9, 9) for convolution.
+#         self.conv_branch = nn.Sequential(
+#             nn.Conv2d(in_channels=emb_dim, out_channels=16, kernel_size=3, padding=1),
+#             nn.ReLU(),
+#             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1),
+#             nn.ReLU(),
+#             nn.Flatten(),  # Output will be (32 * 9 * 9)
+#             nn.Linear(32 * 9 * 9, 64),
+#             nn.ReLU()
+#         )
         
-        # Skip branch:
-        # Flattens the embedded board (without convolution) directly and linearly transforms it.
-        self.skip_branch = nn.Sequential(
-            nn.Flatten(),  # Shape: (batch, 9*9*emb_dim)
-            nn.Linear(9 * 9 * emb_dim, 64),
-            nn.ReLU()
-        )
+#         # Skip branch:
+#         # Flattens the embedded board (without convolution) directly and linearly transforms it.
+#         self.skip_branch = nn.Sequential(
+#             nn.Flatten(),  # Shape: (batch, 9*9*emb_dim)
+#             nn.Linear(9 * 9 * emb_dim, 64),
+#             nn.ReLU()
+#         )
         
-        # Final head: Combines the outputs of both pipelines.
-        self.head = nn.Linear(64, 1)
+#         # Final head: Combines the outputs of both pipelines.
+#         self.head = nn.Linear(64, 1)
     
-    def forward(self, x):
-        # x should be a LongTensor with shape (batch, 9, 9) containing only 0's and 1's.
-        # Convert the board values to dense embeddings.
-        x_emb = self.embedding(x)  # Shape: (batch, 9, 9, emb_dim)
+#     def forward(self, x):
+#         # x should be a LongTensor with shape (batch, 9, 9) containing only 0's and 1's.
+#         # Convert the board values to dense embeddings.
+#         x_emb = self.embedding(x)  # Shape: (batch, 9, 9, emb_dim)
         
-        # Rearrange dimensions to (batch, emb_dim, 9, 9) for the convolutional layers.
-        x_emb = x_emb.permute(0, 3, 1, 2)
+#         # Rearrange dimensions to (batch, emb_dim, 9, 9) for the convolutional layers.
+#         x_emb = x_emb.permute(0, 3, 1, 2)
         
-        # Process through the convolution branch.
-        out_conv = self.conv_branch(x_emb)
+#         # Process through the convolution branch.
+#         out_conv = self.conv_branch(x_emb)
         
-        # Process through the skip branch: flatten directly the embedded board.
-        skip_in = x_emb.flatten(start_dim=1)  # Shape: (batch, 9*9*emb_dim)
-        out_skip = self.skip_branch(skip_in)
+#         # Process through the skip branch: flatten directly the embedded board.
+#         skip_in = x_emb.flatten(start_dim=1)  # Shape: (batch, 9*9*emb_dim)
+#         out_skip = self.skip_branch(skip_in)
         
-        # Combine the outputs of both branches elementwise.
-        combined = out_conv + out_skip
+#         # Combine the outputs of both branches elementwise.
+#         combined = out_conv + out_skip
         
-        # Final scalar output.
-        return self.head(combined)
+#         # Final scalar output.
+#         return self.head(combined)
