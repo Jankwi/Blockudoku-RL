@@ -13,7 +13,7 @@ Directory mainly used during experiments for storing datasets/diagrams required 
 A succesful usage example of the blockulib, to train AI models using ***Reinforcement Learning***.  
 The model ***improved from 15.45*** Moves Per Game, when playing at random ***to 160.48***.
 * ```visualization.ipynb```  
-Python notebook containing visualizations of blockudoku games using different strategies.  
+A comparison of 2 games generated using: (1) A random policy (2) The policy obtained in  ```experiment.ipynb```. 
 
 Many blockulib functions also create/reference a ```models``` directory by default.
 ## The game of Blockudoku
