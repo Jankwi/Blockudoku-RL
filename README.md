@@ -11,7 +11,7 @@ Library providing useful functions, which help in creating RL experiments and pi
 Directory mainly used during experiments for storing datasets/diagrams required to simulate the game.
 * ```experiment.ipynb```  
 A succesful usage example of the blockulib, to train AI models using ***Reinforcement Learning***.  
-The model ***improved from 15.45*** Moves Per Game, when playing at random ***to 160.48*** after initial experiments with blockulib.
+The model ***improved from 15.45*** Moves Per Game, when playing at random ***to 160.48***.
 * ```visualization.ipynb```  
 Python notebook containing visualizations of blockudoku games using different strategies.  
 
@@ -25,7 +25,7 @@ The goal of the game is to amass as many points as possible, before the game is 
 
 ### The original game
 * At each point 3 blocks are drawn (not at random, somehow based on the current state).
-* The player chooses in what order they place the blocks. If all 3 al placed another batch is served.
+* The player chooses in what order they place the blocks. If all 3 are placed, another batch is served.
 * Points granted after every block placement and every time the board is cleared + additional move combos rewards.
 
 ### Blockulib version
