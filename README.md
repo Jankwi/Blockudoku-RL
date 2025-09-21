@@ -1,52 +1,34 @@
 # Blockudoku RL
-Still a work in progress, the Blockudoku-RL repository is home to the blockulib - a Reinforcement Learning library for automating the game of Blockudoku - a Sudoku and tetris crossover.
-This repository also contains .ipynb notebooks mostly serving as working spaces or user examples (often times both ;->)
+The Blockudoku-RL repository is home to the blockulib - a Reinforcement Learning library, created from scratch in PyTorch, for automating the game of Blockudoku - a Sudoku and Tetris crossover. The repository also contains usage examples and experiments using the library.  
+
+Promising results have been achieved already, with the library and experiments still in active development.
+
+## Repository structure
+The repository consists of:
+* The ```blockulib``` directory:  
+Library providing useful functions, which help in creating RL experiments and pipelines for the game of blockudoku.
+* The ```data``` directory:  
+Directory mainly used during experiments for storing datasets/diagrams required to simulate the game.
+* ```experiment.ipynb```  
+A succesful usage example of the blockulib, to train AI models using ***Reinforcement Learning***.  
+The model ***improved from 15.45*** Moves Per Game, when playing at random ***to 160.48*** after initial experiments with blockulib.
+* ```visualization.ipynb```  
+Python notebook containing visualizations of blockudoku games using different strategies.  
+
+Many blockulib functions also create/reference a ```models``` directory by default.
+## The game of Blockudoku
+The game of blockudoku, requires the player to place blocks consisting of squares of different shapes on a 9x9 board. After each turn, if any of the 9 rows, 9 columns or 9 sudoku squares is fully covered by blocks, that part of the board is then cleared. The player is served batches of blocks to place on the board, until they can no longer make a move.
+
+The goal of the game is to amass as many points as possible, before the game is over (no move can be made).
 
 ![The rules of Blockuodoku](https://easybrain.com/uploads/media/1920x1080/08/108-New%20Easybrain%20puzzle%20BlockuDoku%20is%20now%20available%20on%20the%20App%20Store%20worldwide.%20.jpg?v=1-0)
 
-## Overview
+### The original game
+* At each point 3 blocks are drawn (not at random, somehow based on the current state).
+* The player chooses in what order they place the blocks. If all 3 al placed another batch is served.
+* Points granted after every block placement and every time the board is cleared + additional move combos rewards.
 
-The main pipeline enabled by the library, consists of a loop with the following steps:
-* playing (data collection) - collecting different blockudoku boards, and their expected moves value
-
-  (either at random or using a trained model)
-* data transformation - using data transformation/selection techniques to prepare the data for training
-* model training - training a model, whcih predicts the expected moves value of a blockudoku board
-
-Very basic pipelines like this are already implemented in the library.  
-However, more sophisticated methods have to be implemented for the model to achieve any bigger results.   
-therefore the library is still a work in progress.
-## Library structure:
-The blockulib currently consists of these modules:
-
-### __init__
-The base library consists of methods, which are strictly connected to the game and it's vectorised representation:
-* `class BlockGenerator` - randomly chooses a block and generates a list of 9x9 boards with all of the block's possible configurations on the board
-* `def clear_board(input_square, output_square)` - a numba vectorized method, which performs the board cleaning of a tensor containing blockudoku boards
-* `def possible_moves(boards, generator):` - this methods requires a little more attention:
-
-  $\underline{input:}$ $boards$ - a (m, 9, 9) shaped tensor with each of the $m$ blockudoku boards containing a valid state of play, $generator$ - a $BlockGenerator$ istance
-  
-  $\underline{output:}$ A (S, 9, 9) shaped tensor with all the possible moves for each of $boards$'s positions concatenated into one (Let $p_i$ be the $i$-th element of boards and $s(p_i)$ is the numer of possible moves from position $p_i$, then $S = \sum_{i = 1}^{m} s(p_i)$. Another tensor $indices$ is also returned to keep track which possible move came from which position.
-
-There are also some ML helper functions inside:
-* `def sample_from_logits(logits, temperature = 1.0, top_k: int = None):`
-* `def indices_to_range(num_games, index):`
-* `def cut_to_topk(pos, index, logits, num_games, top_k):`
-* `def logits_to_choices(logits, index, num_games, temperature = 1.0, top_k: int = None):`
-
-### data (more info soon)
-All methods and classess connected to processing the data
-
-### models (more soon)
-A module containing the declarations of custom (torch.nn.Module inherent) models.
-
-### pipelines (more info soon)
-The pipelines module is home to the `Configs` class, which contains many hekpful cofigs.  
-The `Pipeline' class, enables executing a full RL loop many times.
-
-### playing (more info soon)
-The playing module contains many classess and methods, useful in collecting data about possible blockudoku positions.
-
-### training
-The data module contains classess and methods useful for training a model on the prieviously collected data.
+### Blockulib version
+* At each turn, 1 block is drawn (uniformly at random).
+* If the player cannot place the block anywhere on the board, the game ends.  
+* One point is granted for each turn the player survives.

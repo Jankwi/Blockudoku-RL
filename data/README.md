@@ -1,0 +1,2 @@
+# The Data directory
+This is the default directory for all data generated during model training (datasets/diagrams) as well as the ```placements_dict.pkl``` containing the vectorized block distribution, and the ```blocks.ipynb``` notebook for generating it.
